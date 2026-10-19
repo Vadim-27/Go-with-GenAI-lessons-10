@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -9,11 +10,15 @@ import (
 	"libratrack/internal/model"
 )
 
-// BookFilter selects a page of books, optionally from one category.
+// BookFilter selects a page of books, optionally from one category and
+// matching a search text.
 type BookFilter struct {
 	CategoryID *uint
-	Page       int
-	Limit      int
+	// Search — підрядок назви, ISBN або імені автора (без урахування регістру).
+	// Порожній рядок означає "без фільтра".
+	Search string
+	Page   int
+	Limit  int
 }
 
 // BookRepository is the storage contract for books. Every method takes a
@@ -144,6 +149,14 @@ func (r *gormBookRepository) List(ctx context.Context, filter BookFilter) ([]mod
 	if filter.CategoryID != nil {
 		q = q.Where("books.category_id = ?", *filter.CategoryID)
 	}
+	if s := strings.TrimSpace(filter.Search); s != "" {
+		// Значення йде лише плейсхолдером (без SQL-ін'єкцій); % і _ екрануються,
+		// щоб користувач не міг підставити власний шаблон LIKE.
+		pattern := "%" + escapeLike(s) + "%"
+		q = q.Where(`(books.title ILIKE ? OR books.isbn ILIKE ? OR EXISTS (
+			SELECT 1 FROM book_authors ba JOIN authors a ON a.id = ba.author_id
+			WHERE ba.book_id = books.id AND a.full_name ILIKE ?))`, pattern, pattern, pattern)
+	}
 
 	books := []model.Book{}
 	if err := q.Limit(filter.Limit).Offset(offset).Find(&books).Error; err != nil {
@@ -183,6 +196,11 @@ func linkAuthors(tx *gorm.DB, bookID uint, authorIDs []uint) error {
 	}
 	return translateError(tx.Create(&rows).Error)
 }
+
+// likeEscaper екранує спецсимволи LIKE (\ — стандартний escape у PostgreSQL).
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+func escapeLike(s string) string { return likeEscaper.Replace(s) }
 
 // uniqueIDs removes duplicates and keeps the order of first appearance.
 func uniqueIDs(ids []uint) []uint {

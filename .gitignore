@@ -14,3 +14,4 @@ bin/
 app.log
 test.log
 cover.out
+/libratrack

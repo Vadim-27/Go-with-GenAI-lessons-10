@@ -3,18 +3,26 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
-	// Database driver (pgx v5) and file source for golang-migrate.
+	// Database driver (pgx v5) for golang-migrate.
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
-// Migrate applies all pending SQL migrations from dir to the database. The
+// Migrate applies all pending SQL migrations from src to the database. The
 // schema is created only by these files, never by the ORM.
-func Migrate(dsn, dir string) error {
-	m, err := migrate.New("file://"+dir, pgxURL(dsn))
+//
+// src is usually the embedded migrations.FS, so the binary does not need the
+// migrations folder on disk; os.DirFS(dir) works as well.
+func Migrate(dsn string, src fs.FS) error {
+	driver, err := iofs.New(src, ".")
+	if err != nil {
+		return fmt.Errorf("open migrations: %w", err)
+	}
+	m, err := migrate.NewWithSourceInstance("iofs", driver, pgxURL(dsn))
 	if err != nil {
 		return fmt.Errorf("init migrations: %w", err)
 	}

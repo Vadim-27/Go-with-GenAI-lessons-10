@@ -4,7 +4,6 @@ package testutil
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,13 +12,14 @@ import (
 	"gorm.io/gorm/logger"
 
 	"libratrack/internal/repository"
+	"libratrack/migrations"
 )
 
 // NewDB returns a connection to a clean, fully migrated database schema.
 //
 // Go runs the test packages in parallel, so every package passes its own
 // schema name: packages never see each other's rows. The schema is dropped
-// and recreated, the real SQL migrations are applied to it, and the demo seed
+// and recreated, the real (embedded) SQL migrations are applied to it, and the demo seed
 // rows are removed so each test starts from empty tables.
 //
 // The test is skipped when TEST_DATABASE_URL is not set.
@@ -43,7 +43,7 @@ func NewDB(t *testing.T, schema string) *gorm.DB {
 	}
 
 	dsn := withSearchPath(base, schema)
-	if err := repository.Migrate(dsn, migrationsDir(t)); err != nil {
+	if err := repository.Migrate(dsn, migrations.FS); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
 
@@ -73,28 +73,4 @@ func withSearchPath(dsn, schema string) string {
 		sep = "&"
 	}
 	return dsn + sep + "search_path=" + schema
-}
-
-// migrationsDir finds the migrations folder by walking up from the test's
-// working directory and returns it relative to that directory.
-func migrationsDir(t *testing.T) string {
-	t.Helper()
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for dir := cwd; ; dir = filepath.Dir(dir) {
-		candidate := filepath.Join(dir, "migrations")
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			rel, err := filepath.Rel(cwd, candidate)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return filepath.ToSlash(rel)
-		}
-		if dir == filepath.Dir(dir) {
-			t.Fatal("migrations folder not found")
-		}
-	}
 }
