@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"libratrack/internal/app"
 	"libratrack/internal/auth"
 	"libratrack/internal/model"
 	"libratrack/internal/testutil"
@@ -38,7 +37,7 @@ func newAPI(t *testing.T) *api {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &api{t: t, router: app.NewRouter(db), token: token}
+	return &api{t: t, router: testutil.NewRouter(t, db), token: token}
 }
 
 // call sends a request and returns the status code and the decoded JSON body.

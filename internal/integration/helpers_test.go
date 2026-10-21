@@ -14,7 +14,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/gorm"
 
-	"libratrack/internal/app"
 	"libratrack/internal/auth"
 	"libratrack/internal/model"
 	"libratrack/internal/testutil"
@@ -46,7 +45,7 @@ func newEnv(t *testing.T) *env {
 	t.Setenv("JWT_SECRET", testSecret)
 
 	db := testutil.NewDB(t, schemaName)
-	e := &env{t: t, db: db, router: app.NewRouter(db), users: map[string]model.User{}}
+	e := &env{t: t, db: db, router: testutil.NewRouter(t, db), users: map[string]model.User{}}
 
 	hash, err := auth.HashPassword(testPassword)
 	if err != nil {

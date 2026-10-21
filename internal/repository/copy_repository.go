@@ -19,6 +19,9 @@ type CopyRepository interface {
 	// Availability counts all and available copies of a book, or ErrNotFound
 	// if the book does not exist.
 	Availability(ctx context.Context, bookID uint) (model.Availability, error)
+	// AvailabilityByBooks рахує примірники кількох книг ОДНИМ запитом (GROUP BY),
+	// щоб сторінка каталогу не робила N запитів. Книги без примірників у мапі відсутні.
+	AvailabilityByBooks(ctx context.Context, bookIDs []uint) (map[uint]model.Availability, error)
 }
 
 type gormCopyRepository struct {
@@ -76,4 +79,29 @@ func (r *gormCopyRepository) requireBook(ctx context.Context, bookID uint) error
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *gormCopyRepository) AvailabilityByBooks(ctx context.Context, bookIDs []uint) (map[uint]model.Availability, error) {
+	result := make(map[uint]model.Availability, len(bookIDs))
+	if len(bookIDs) == 0 {
+		return result, nil
+	}
+
+	var rows []struct {
+		BookID    uint
+		Total     int64
+		Available int64
+	}
+	err := r.db.WithContext(ctx).Model(&model.Copy{}).
+		Select("book_id, COUNT(*) AS total, COUNT(*) FILTER (WHERE status = ?) AS available", model.StatusAvailable).
+		Where("book_id IN ?", bookIDs).
+		Group("book_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, translateError(err)
+	}
+	for _, row := range rows {
+		result[row.BookID] = model.Availability{BookID: row.BookID, TotalCopies: row.Total, AvailableCopies: row.Available}
+	}
+	return result, nil
 }
